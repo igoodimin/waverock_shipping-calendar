@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>배송달력 만들기</title>
+<style>
+  :root{--bg:#eceae6;--panel:#fff;--line:#dedbd5;--ink:#1d1d1d;--sub:#77736c;--red:#f72323;--accent:#111}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif}
+  .app{display:grid;grid-template-columns:360px 1fr;min-height:100vh}
+  aside{background:var(--panel);border-right:1px solid var(--line);padding:18px 18px 40px;overflow:auto;max-height:100vh;position:sticky;top:0}
+  h1{font-size:18px;margin:0 0 4px}
+  .hint{color:var(--sub);font-size:12px;margin:0}
+  section{border-top:1px solid var(--line);padding:14px 0 4px;margin-top:14px}
+  h2{font-size:13px;margin:0 0 8px;letter-spacing:.02em}
+  .row{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+  label.f{display:block;font-size:12px;color:var(--sub);margin:6px 0 2px}
+  input[type=text],input[type=month],input[type=date],select,textarea{font:inherit;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:#fff;color:var(--ink);min-width:0}
+  textarea{width:100%;resize:vertical}
+  button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 10px;cursor:pointer;color:var(--ink)}
+  button:hover{border-color:#aaa}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.small{padding:2px 8px;font-size:12px}
+  button:disabled{opacity:.4;cursor:default}
+  .grow{flex:1}
+  .lines .ln{display:grid;grid-template-columns:1fr 110px 28px;gap:4px;margin-bottom:4px}
+  .hol{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px}
+  .hol div{display:flex;justify-content:space-between;gap:6px;padding:2px 0}
+  .hol .c{color:#c22}
+  main{padding:18px 24px 40px;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .stage{position:relative;max-width:100%;box-shadow:0 2px 16px rgba(0,0,0,.12);user-select:none;-webkit-user-select:none}
+  .stage canvas{display:block;width:100%;height:100%;cursor:pointer;touch-action:none}
+  .sel{position:absolute;background:rgba(247,35,35,.28);outline:2px solid rgba(247,35,35,.8);pointer-events:none}
+  .hover{position:absolute;outline:2px dashed rgba(0,0,0,.35);pointer-events:none}
+  .dl{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  #pop{position:fixed;z-index:10;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:12px;width:260px;display:none}
+  #pop .types{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px}
+  #pop .types button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  #pop h3{margin:0 0 8px;font-size:14px}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.on{opacity:1}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:15px;z-index:20}
+  @media (max-width:900px){.app{grid-template-columns:1fr}aside{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}main{padding:16px}}
+</style>
+</head>
+<body>
+<div id="loading">글꼴과 질감을 불러오는 중…</div>
+<div class="app">
+  <aside>
+    <h1>배송달력 만들기</h1>
+    <p class="hint">날짜칸을 누르면 마감·재개·휴무를 고릅니다. 날짜칸을 끌면 그 기간이 배송휴무가 됩니다.</p>
+
+    <section>
+      <h2>연월</h2>
+      <div class="row">
+        <button id="prevM" title="이전 달">◀</button>
+        <input type="month" id="ym" class="grow">
+        <button id="nextM" title="다음 달">▶</button>
+      </div>
+      <label class="f">보여 줄 주</label>
+      <div class="row">
+        <select id="w0" class="grow"></select><span>~</span><select id="w1" class="grow"></select>
+      </div>
+      <p class="hint">"자동"은 휴무·마감·재개가 있는 주만 보여 줍니다.</p>
+    </section>
+
+    <section>
+      <h2>제목</h2>
+      <input type="text" id="title" style="width:100%">
+      <p class="hint">{월} 자리에 고른 달이 들어갑니다.</p>
+      <div class="row" style="margin-top:6px"><label><input type="checkbox" id="rough"> 제목 거칠게</label></div>
+    </section>
+
+    <section>
+      <h2>하단 문구</h2>
+      <div class="row"><label><input type="checkbox" id="autoLines"> 휴무 기간으로 자동 작성</label></div>
+      <div class="lines" id="lines"></div>
+      <div class="row"><button class="small" id="addLine">+ 줄 추가</button></div>
+      <p class="hint">왼쪽 칸은 굵은 글씨, 오른쪽 칸은 보통 글씨입니다. 글을 고치면 자동 작성이 꺼집니다.</p>
+    </section>
+
+    <section>
+      <h2>공휴일 · 택배없는날</h2>
+      <div class="hol" id="holList"></div>
+      <label class="f">휴일 직접 추가 (예: 택배없는날)</label>
+      <div class="row">
+        <input type="date" id="hDate" class="grow"><input type="text" id="hName" placeholder="이름" style="width:100px">
+        <button id="hAdd">추가</button>
+      </div>
+      <div class="row"><button id="reAuto">이 달 자동 휴무 다시 적용</button></div>
+      <p class="hint">다시 적용하면 이 달에 직접 고친 날짜 설정이 지워집니다. 되돌리기(⌘Z)로 되살릴 수 있습니다.</p>
+    </section>
+
+    <section>
+      <h2>색상 · 질감</h2>
+      <div class="row">
+        <label>빨강 <input type="color" id="cRed"></label>
+        <label>파랑 <input type="color" id="cBlue"></label>
+        <label>검정 <input type="color" id="cBlack"></label>
+      </div>
+      <label class="f">질감 강도 <span id="texV"></span></label>
+      <input type="range" id="tex" min="0" max="2" step="0.05" style="width:100%">
+      <div class="row"><button class="small" id="resetLook">기본값으로</button></div>
+    </section>
+
+    <section>
+      <h2>저장 · 되돌리기</h2>
+      <div class="row">
+        <button id="undo">↶ 되돌리기 ⌘Z</button>
+        <button id="redo">↷ 다시 ⇧⌘Z</button>
+      </div>
+      <div class="row">
+        <button id="exportJson">설정 파일 저장</button>
+        <button id="importBtn">설정 불러오기</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint">작업 내용은 이 브라우저에 자동 저장됩니다. 다른 컴퓨터로 옮길 때는 설정 파일을 쓰세요.</p>
+    </section>
+  </aside>
+
+  <main>
+    <div class="tabs" id="tabs"></div>
+    <div class="stage" id="stage"><canvas id="cv"></canvas></div>
+    <div class="dl" id="dl"></div>
+  </main>
+</div>
+
+<div id="pop">
+  <h3 id="popTitle"></h3>
+  <div class="types" id="popTypes"></div>
+  <label class="f">칸 안 글자 (줄 바꿈 가능)</label>
+  <textarea id="popLabel" rows="2"></textarea>
+  <div class="row" style="margin-top:8px;justify-content:space-between">
+    <button class="small" id="popDefault">기본 문구</button>
+    <button class="small primary" id="popClose">닫기</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="assets.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ───────── 기본 데이터 ───────── */
+const WD = ['일','월','화','수','목','금','토'];
+const WD_EN = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+const TYPES = [
+  {k:'none',  name:'없음',     label:''},
+  {k:'close', name:'주문마감', label:'오후2시\n주문마감'},
+  {k:'resume',name:'배송재개', label:'배송재개'},
+  {k:'off',   name:'배송휴무', label:'배송휴무'},
+];
+const DEFAULT_LABEL = Object.fromEntries(TYPES.map(t => [t.k, t.label]));
+
+// 법정 공휴일·대체공휴일 (직접 추가한 휴일은 설정에 따로 저장)
+const HOLIDAYS = {
+  '2026-01-01':'신정','2026-02-16':'설날 연휴','2026-02-17':'설날','2026-02-18':'설날 연휴',
+  '2026-03-01':'삼일절','2026-03-02':'대체공휴일','2026-05-05':'어린이날','2026-05-24':'부처님오신날',
+  '2026-05-25':'대체공휴일','2026-06-03':'지방선거','2026-06-06':'현충일','2026-08-15':'광복절',
+  '2026-08-17':'대체공휴일','2026-09-24':'추석 연휴','2026-09-25':'추석','2026-09-26':'추석 연휴',
+  '2026-09-28':'대체공휴일','2026-10-03':'개천절','2026-10-05':'대체공휴일','2026-10-09':'한글날',
+  '2026-12-25':'성탄절',
+  '2027-01-01':'신정','2027-02-06':'설날 연휴','2027-02-07':'설날','2027-02-08':'설날 연휴',
+  '2027-02-09':'대체공휴일','2027-03-01':'삼일절','2027-05-05':'어린이날','2027-05-13':'부처님오신날',
+  '2027-06-06':'현충일','2027-08-15':'광복절','2027-08-16':'대체공휴일','2027-09-14':'추석 연휴',
+  '2027-09-15':'추석','2027-09-16':'추석 연휴','2027-10-03':'개천절','2027-10-04':'대체공휴일',
+  '2027-10-09':'한글날','2027-10-11':'대체공휴일','2027-12-25':'성탄절','2027-12-27':'대체공휴일',
+};
+
+/* 비율별 배치 — 원본 PNG(폭 2250px)에서 잰 값. s는 3:4 대비 배율, 나머지는 해당 비율 캔버스의 px */
+const FORMATS = [
+  {k:'sq',  name:'정방형 1:1', file:'정방형', W:2250, H:2250, s:0.9226, truck:205, title:358, header:564,  gLT:77,  pitch:104},
+  {k:'p34', name:'3:4',        file:'3x4',    W:2250, H:3000, s:1,      truck:457, title:622, header:888,  gLT:126, pitch:113},
+  {k:'st',  name:'9:16',       file:'9x16',   W:2250, H:4000, s:1.0516, truck:699, title:873, header:1152, gLT:132, pitch:118},
+];
+// 3:4(2250×3000) 기준 크기. 1080×1440 기준 Anton 50px·Pretendard 29px를 2250/1080배 한 값
+const B = {
+  cx:1125, calHalf:1005, headHalf:1008, headH:190, rowH:421, numOff:93, labelOff:219, labelPitch:70,
+  barH:138, barFlat:38, circleR:65.5, ringR:72, ringW:11, gridW:7, lineH:11,
+  truckW:203, numSize:100, numSx:0.89, headSize:96, headSx:0.91, headDx:-10, labelSize:58, holSize:42, holOff:128, titleSize:137, titleDx:-38, textSize:67.5, textGlyphH:66,
+};
+const BASE = {bg:'#f5f5f5', grid:'#dcdcdc', ring:'#a7a7a7', headText:'#ecebe6', white:'#ffffff', lift:21};
+const LOOK_DEFAULT = {red:'#f72323', blue:'#00b7ff', black:'#000000', tex:1, rough:true};
+const TRUCK_PATH = 'M62.79,9.68h11.62s14.71,0,14.71,0c.64,0,1.17-.53,1.17-1.17v-.52c0-.64-.53-1.17-1.17-1.17h-30.85s-.04,0-.06,0h-.08c-.64,0-1.17-.53-1.17-1.17s.53-1.17,1.17-1.17h16.28s6.34,0,6.34,0c.64,0,1.17-.53,1.17-1.17v-.52c0-.64-.53-1.17-1.17-1.17h-6.34V0H23.23s.27,8.91.14,8.78h-12.02L0,19.72v13.91l1.76,1.89h2.17c0-.07-.01-.13-.01-.2,0-4.14,3.36-7.5,7.5-7.5s7.5,3.36,7.5,7.5c0,.07,0,.13-.01.2h34.12c0-.07-.01-.13-.01-.2,0-4.14,3.36-7.5,7.5-7.5s7.5,3.36,7.5,7.5c0,.07,0,.13-.01.2h4.54l1.89-1.89v-11.2h-9.19c-.64,0-1.17-.53-1.17-1.17s.53-1.17,1.17-1.17h9.19s14.71,0,14.71,0c.64,0,1.17-.53,1.17-1.17v-.52c0-.64-.53-1.17-1.17-1.17h-29.04c-.61-.03-1.11-.54-1.11-1.16s.53-1.17,1.17-1.17h14.26s7.62,0,7.62,0c.64,0,1.17-.53,1.17-1.17v-.52c0-.64-.53-1.17-1.17-1.17h-19.31c-.61-.03-1.11-.54-1.11-1.16s.53-1.17,1.17-1.17ZM20.93,19.45H5.27l6.75-7.16h8.91v7.16Z';
+const TRUCK_VB = {w:90.29, h:41.98};
+
+/* ───────── 날짜 도구 ───────── */
+const pad = n => String(n).padStart(2,'0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const addDays = (d,n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n);
+const dim = (y,m) => new Date(y, m, 0).getDate(); // m: 1~12
+const mkey = (y,m) => `${y}-${pad(m)}`;
+const fmtMD = d => `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`;
+
+/* ───────── 상태 ───────── */
+const STORE_KEY = 'shipcal.v1';
+let store = {
+  global:{title:'{월}월 배송안내', look:{...LOOK_DEFAULT}, custom:[], fmt:'p34'},
+  months:{}, cur:null,
+};
+let undoStack = [], redoStack = [];
+
+function holidayName(isoStr){
+  const c = store.global.custom.find(h => h.date === isoStr);
+  return c ? c.name : HOLIDAYS[isoStr] || null;
+}
+const isHoliday = d => !!holidayName(iso(d));
+const isWeekend = d => d.getDay() === 0 || d.getDay() === 6;
+
+/* 공휴일로 기본 휴무·마감·재개 만들기 */
+function autoDays(y, m){
+  const days = {};
+  const first = new Date(y, m-1, 1), last = new Date(y, m-1, dim(y,m));
+  const isOffBase = d => isWeekend(d) || isHoliday(d);
+  const ranges = [];
+  for (let d = addDays(first,-7); d <= addDays(last,7); d = addDays(d,1)){
+    if (!isHoliday(d)) continue;
+    let a = d, b = d;
+    while (isOffBase(addDays(a,-1))) a = addDays(a,-1);
+    while (isOffBase(addDays(b,1))) b = addDays(b,1);
+    // 주말만으로 이뤄진 기간(토요일 공휴일 등)은 배송에 영향이 없어 제외
+    let weekday = false;
+    for (let x=a; x<=b; x=addDays(x,1)) if (!isWeekend(x)) weekday = true;
+    if (!weekday) continue;
+    if (!ranges.some(r => +r.a === +a)) ranges.push({a,b});
+  }
+  const inMonth = d => d.getFullYear()===y && d.getMonth()===m-1;
+  for (const r of ranges){
+    for (let x=r.a; x<=r.b; x=addDays(x,1)){
+      if (!inMonth(x)) continue;
+      days[x.getDate()] = {type:'off', label: isHoliday(x) ? DEFAULT_LABEL.off : ''};
+    }
+    let rs = addDays(r.b,1); while (isOffBase(rs)) rs = addDays(rs,1);
+    if (inMonth(rs) && !days[rs.getDate()]) days[rs.getDate()] = {type:'resume', label:DEFAULT_LABEL.resume};
+  }
+  for (const r of ranges){ // 마감이 재개와 겹치면 마감을 우선
+    let c = addDays(r.a,-1); while (isOffBase(c)) c = addDays(c,-1);
+    if (inMonth(c) && (!days[c.getDate()] || days[c.getDate()].type==='resume')) days[c.getDate()] = {type:'close', label:DEFAULT_LABEL.close};
+  }
+  return days;
+}
+
+function newMonth(y, m){
+  const st = {y, m, days:autoDays(y,m), w0:'auto', w1:'auto', lines:[], autoLines:true};
+  st.lines = autoLines(st);
+  return st;
+}
+function M(){ return store.months[store.cur]; }
+function ensureMonth(y, m){
+  const k = mkey(y,m);
+  if (!store.months[k]) store.months[k] = newMonth(y,m);
+  store.cur = k;
+}
+
+/* 휴무 기간 → 하단 문구 */
+function offRanges(st){
+  const out = []; const n = dim(st.y, st.m); let a = null;
+  for (let d=1; d<=n+1; d++){
+    const off = d<=n && st.days[d] && st.days[d].type==='off';
+    if (off && a===null) a = d;
+    if (!off && a!==null){ out.push([a, d-1]); a = null; }
+  }
+  return out;
+}
+function autoLines(st){
+  return offRanges(st).map(([a,b]) => {
+    const da = new Date(st.y, st.m-1, a), db = new Date(st.y, st.m-1, b);
+    let r = addDays(db,1);
+    for (let i=0; i<30; i++){
+      const inM = r.getMonth()===st.m-1;
+      const off = isWeekend(r) || isHoliday(r) || (inM && st.days[r.getDate()] && st.days[r.getDate()].type==='off');
+      if (!off) break; r = addDays(r,1);
+    }
+    const span = a===b ? fmtMD(da) : `${fmtMD(da)}~${fmtMD(db)}`;
+    return {b:`${span} 주문건은 ${fmtMD(r)}부터`, n:'순차배송됩니다.'};
+  });
+}
+
+/* 주 계산 */
+function weeksOf(st){
+  const off = new Date(st.y, st.m-1, 1).getDay(); const n = dim(st.y, st.m);
+  const count = Math.ceil((off+n)/7); const weeks = [];
+  for (let w=0; w<count; w++){
+    const ds = [];
+    for (let c=0; c<7; c++){ const d = w*7+c-off+1; ds.push(d>=1 && d<=n ? d : null); }
+    weeks.push(ds);
+  }
+  return weeks;
+}
+function shownWeeks(st){
+  const weeks = weeksOf(st);
+  const marked = weeks.map(ds => ds.some(d => d && st.days[d] && st.days[d].type!=='none'));
+  let a = marked.indexOf(true), b = marked.lastIndexOf(true);
+  if (a<0){ a = 0; b = weeks.length-1; }
+  if (st.w0!=='auto') a = Math.min(+st.w0, weeks.length-1);
+  if (st.w1!=='auto') b = Math.min(+st.w1, weeks.length-1);
+  if (b<a) b = a;
+  return {weeks, a, b};
+}
+
+/* ───────── 저장 · 되돌리기 ───────── */
+function persist(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){} }
+function snapshot(){ return JSON.stringify(store); }
+let typingTimer = null;
+function pushUndo(coalesce){
+  if (coalesce && typingTimer){ clearTimeout(typingTimer); typingTimer = setTimeout(()=>typingTimer=null, 900); return; }
+  undoStack.push(snapshot()); if (undoStack.length>200) undoStack.shift();
+  redoStack = [];
+  if (coalesce) typingTimer = setTimeout(()=>typingTimer=null, 900);
+  updUndoBtns();
+}
+function undo(){ if (!undoStack.length) return; closePop(); redoStack.push(snapshot()); store = JSON.parse(undoStack.pop()); typingTimer=null; afterChange(true); }
+function redo(){ if (!redoStack.length) return; closePop(); undoStack.push(snapshot()); store = JSON.parse(redoStack.pop()); typingTimer=null; afterChange(true); }
+function updUndoBtns(){ $('undo').disabled = !undoStack.length; $('redo').disabled = !redoStack.length; }
+
+function change(fn, coalesce){
+  pushUndo(coalesce);
+  fn();
+  const st = M();
+  if (st.autoLines) st.lines = autoLines(st);
+  afterChange(false);
+}
+function afterChange(full){
+  persist(); updUndoBtns();
+  if (full) syncForm(); else { syncWeeks(); syncLines(); }
+  render();
+}
+
+/* ───────── 그리기 ───────── */
+const A = window.SHIPCAL_ASSETS;
+let texImg = null;
+const FONT = {num:'ShipAnton', eb:'ShipPretendardEB', bold:'ShipPretendardB', med:'ShipPretendardM', reg:'ShipPretendardR', title:'ShipNotoBlack'};
+const fontStack = f => `"${f}", "Pretendard", "Apple SD Gothic Neo", sans-serif`;
+
+function b64buf(s){ const bin = atob(s); const u = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u.buffer; }
+async function loadAssets(){
+  const map = {anton:FONT.num, eb:FONT.eb, bold:FONT.bold, medium:FONT.med, regular:FONT.reg, noto:FONT.title};
+  await Promise.all(Object.entries(map).map(async ([k,fam]) => {
+    const ff = new FontFace(fam, b64buf(A.fonts[k])); await ff.load(); document.fonts.add(ff);
+  }));
+  texImg = new Image(); texImg.src = A.texture; await texImg.decode();
+}
+
+// 고정 시드 잡음 — 매번 같은 거친 모양이 나오게
+function rng(seed){ let s = seed>>>0 || 1; return () => (s = (s*1664525 + 1013904223)>>>0) / 4294967296; }
+function noise1(seed){
+  const r = rng(seed); const v = Array.from({length:4096}, r);
+  return x => { const i = Math.floor(x), f = x-i, t = f*f*(3-2*f); return v[i&4095]*(1-t) + v[(i+1)&4095]*t; };
+}
+// 가장자리가 울퉁불퉁한 사각형
+function roughRect(ctx, x0, y0, x1, y1, amp, seed, step){
+  step = step || 5;
+  const n = [noise1(seed), noise1(seed+1), noise1(seed+2), noise1(seed+3)];
+  const j = (k, t) => (n[k](t/9)*0.75 + n[k](t/2.2)*0.25 - 0.5) * 2 * amp;
+  ctx.beginPath();
+  for (let x=x0; x<=x1; x+=step) ctx.lineTo(x, y0 + j(0,x));
+  for (let y=y0; y<=y1; y+=step) ctx.lineTo(x1 + j(1,y), y);
+  for (let x=x1; x>=x0; x-=step) ctx.lineTo(x, y1 + j(2,x));
+  for (let y=y1; y>=y0; y-=step) ctx.lineTo(x0 + j(3,y), y);
+  ctx.closePath(); ctx.fill();
+}
+
+const titleCache = new Map();
+function roughText(text, font, color, rough){
+  const key = [text,font,color,rough].join('|');
+  if (titleCache.has(key)) return titleCache.get(key);
+  const c = document.createElement('canvas'), x = c.getContext('2d');
+  x.font = font; const m = x.measureText(text);
+  const padd = 20;
+  c.width = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight) + padd*2;
+  c.height = Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) + padd*2;
+  x.font = font; x.fillStyle = color;
+  x.fillText(text, padd + m.actualBoundingBoxLeft, padd + m.actualBoundingBoxAscent);
+  if (rough){
+    // 살짝 흐린 글자에 잡음을 더한 뒤 다시 또렷하게 → 가장자리가 오돌토돌해짐 (일러스트레이터 '거칠게 하기' 흉내)
+    const b = document.createElement('canvas'); b.width = c.width; b.height = c.height;
+    const bx = b.getContext('2d'); bx.filter = 'blur(1.6px)'; bx.drawImage(c, 0, 0);
+    const im = bx.getImageData(0,0,c.width,c.height), d = im.data, W = c.width, H = c.height;
+    const r = rng(7), grid = 3.5, gw = Math.ceil(W/grid)+2, gh = Math.ceil(H/grid)+2;
+    const g = Array.from({length:gw*gh}, r);
+    const vn = (px,py) => { const fx=px/grid, fy=py/grid, ix=fx|0, iy=fy|0, tx=fx-ix, ty=fy-iy;
+      const a=g[iy*gw+ix], b2=g[iy*gw+ix+1], cc=g[(iy+1)*gw+ix], dd=g[(iy+1)*gw+ix+1];
+      return (a*(1-tx)+b2*tx)*(1-ty) + (cc*(1-tx)+dd*tx)*ty; };
+    for (let py=0; py<H; py++) for (let px=0; px<W; px++){
+      const i = (py*W+px)*4+3, a = d[i]/255;
+      if (a===0 || a===1) continue;
+      const v = a + (vn(px,py)-0.5)*0.35 + (r()-0.5)*0.07;
+      d[i] = Math.max(0, Math.min(255, (v-0.5)*4*255 + 127.5));
+    }
+    x.clearRect(0,0,W,H); x.putImageData(im,0,0);
+    x.globalCompositeOperation = 'source-in'; x.fillStyle = color; x.fillRect(0,0,W,H);
+  }
+  const out = {c, left:padd + m.actualBoundingBoxLeft, top:padd, w:m.width};
+  titleCache.set(key, out);
+  return out;
+}
+
+// 가로 비율을 줄여 쓰기 (원본의 Anton 글자 폭에 맞춤)
+function fillTextSx(ctx, t, x, y, sx){ ctx.save(); ctx.translate(x, y); ctx.scale(sx, 1); ctx.fillText(t, 0, 0); ctx.restore(); }
+function textBox(ctx, s){ const m = ctx.measureText(s); return {asc:m.actualBoundingBoxAscent, desc:m.actualBoundingBoxDescent, w:m.width}; }
+
+// 레이아웃 계산 (보여 줄 주 수·문구 줄 수에 맞춰 위치와 배율을 정함)
+function layout(fmt, nRows, nLines){
+  const s = fmt.s;
+  const height = (k, rows, lines) => {
+    const top = fmt.truck;
+    const rowsTop = fmt.header + (B.headH*s)*k;
+    const lineTop = rowsTop + rows*B.rowH*s*k;
+    const bottom = lines ? lineTop + B.lineH*s*k + (fmt.gLT - B.lineH*s) + (lines-1)*fmt.pitch + B.textGlyphH*s : lineTop + B.lineH*s;
+    return {top, bottom};
+  };
+  // 원본(3주, 2줄)의 위·아래 여백
+  const ref = height(1, 3, 2);
+  const margin = Math.min(ref.top, fmt.H - ref.bottom);
+  const centerRef = (ref.top + ref.bottom)/2;
+  // 세로 크기를 k배로 했을 때의 전체 높이
+  const total = k => {
+    const hdr = (fmt.header - fmt.truck)*k + B.headH*s*k + nRows*B.rowH*s*k + B.lineH*s*k;
+    const txt = nLines ? (fmt.gLT - B.lineH*s)*k + (nLines-1)*fmt.pitch*k + B.textGlyphH*s*k : 0;
+    return hdr + txt;
+  };
+  let k = 1;
+  const t1 = total(1);
+  if (t1 > fmt.H - 2*margin) k = (fmt.H - 2*margin) / t1;
+  const top = centerRef - total(k)/2;
+  const S = s*k;
+  const L = {
+    S, k,
+    truckTop: top,
+    titleTop: top + (fmt.title - fmt.truck)*k,
+    headTop:  top + (fmt.header - fmt.truck)*k,
+  };
+  L.rowsTop = L.headTop + B.headH*S;
+  L.rowH = B.rowH*S;
+  L.lineTop = L.rowsTop + nRows*L.rowH;
+  L.textTop = L.lineTop + B.lineH*S + (fmt.gLT - B.lineH*s)*k;
+  L.pitch = fmt.pitch*k;
+  L.x0 = B.cx - B.calHalf*S; L.x1 = B.cx + B.calHalf*S; L.colW = (L.x1-L.x0)/7;
+  return L;
+}
+
+function render(target, fmtKey){
+  const fmt = FORMATS.find(f => f.k === (fmtKey || store.global.fmt));
+  const cv = target || $('cv');
+  cv.width = fmt.W; cv.height = fmt.H;
+  const ctx = cv.getContext('2d');
+  const st = M(), look = store.global.look;
+  const {weeks, a, b} = shownWeeks(st);
+  const rows = weeks.slice(a, b+1);
+  const lines = st.lines.filter(l => (l.b||'').trim() || (l.n||'').trim());
+  const L = layout(fmt, rows.length, lines.length);
+  const S = L.S;
+  if (!target) lastLayout = {L, rows, fmt};
+
+  // 배경
+  ctx.fillStyle = BASE.bg; ctx.fillRect(0,0,fmt.W,fmt.H);
+
+  // 격자선
+  ctx.fillStyle = BASE.grid;
+  const gw = B.gridW*S;
+  for (let c=1; c<7; c++){ const x = L.x0 + c*L.colW; roughRect(ctx, x-gw/2, L.rowsTop, x+gw/2, L.lineTop, 1.1*S, 100+c, 6); }
+  for (let r=1; r<rows.length; r++){ const y = L.rowsTop + r*L.rowH; roughRect(ctx, L.x0, y-gw/2, L.x1, y+gw/2, 1.1*S, 200+r, 6); }
+
+  // 요일 띠
+  ctx.fillStyle = look.black;
+  roughRect(ctx, B.cx - B.headHalf*S, L.headTop, B.cx + B.headHalf*S, L.headTop + B.headH*S, 3.2*S, 11, 5);
+  ctx.font = `${B.headSize*S}px ${fontStack(FONT.num)}`; ctx.textAlign = 'center';
+  const hb = textBox(ctx, 'SUN');
+  const headMid = L.headTop + B.headH*S/2;
+  WD_EN.forEach((w,i) => {
+    ctx.fillStyle = i===0 ? look.red : i===6 ? look.blue : BASE.headText;
+    fillTextSx(ctx, w, L.x0 + (i+.5)*L.colW + B.headDx*S, headMid + (hb.asc - hb.desc)/2, B.headSx);
+  });
+
+  // 휴무 막대
+  const dayAt = (r,c) => rows[r][c];
+  const T = d => d && st.days[d] ? st.days[d].type : 'none';
+  const barH = B.barH*S, capR = barH/2, flat = B.barFlat*S;
+  ctx.fillStyle = look.red;
+  rows.forEach((ds, r) => {
+    const cy = L.rowsTop + r*L.rowH + B.numOff*S;
+    let c = 0;
+    while (c < 7){
+      if (T(ds[c]) !== 'off'){ c++; continue; }
+      let e = c; while (e+1<7 && T(ds[e+1])==='off') e++;
+      const d0 = ds[c], d1 = ds[e];
+      // 주를 넘어 이어지면 그쪽 끝은 각지게
+      const contL = c===0 && st.days[d0-1] && T(d0-1)==='off';
+      const contR = e===6 && st.days[d1+1] && T(d1+1)==='off';
+      const xs = L.x0 + (c+.5)*L.colW - flat, xe = L.x0 + (e+.5)*L.colW + flat;
+      const left = contL ? L.x0 : xs, right = contR ? L.x1 : xe;
+      ctx.beginPath();
+      if (contL) { ctx.moveTo(left, cy-capR); } else { ctx.moveTo(left, cy-capR); }
+      ctx.lineTo(right, cy-capR);
+      if (contR) { ctx.lineTo(right, cy+capR); } else { ctx.arc(right, cy, capR, -Math.PI/2, Math.PI/2); }
+      ctx.lineTo(left, cy+capR);
+      if (contL) { ctx.lineTo(left, cy-capR); } else { ctx.arc(left, cy, capR, Math.PI/2, Math.PI*1.5); }
+      ctx.closePath(); ctx.fill();
+      c = e+1;
+    }
+  });
+
+  // 날짜·표시·칸 글자
+  ctx.font = `${B.numSize*S}px ${fontStack(FONT.num)}`;
+  const nb = textBox(ctx, '0123456789');
+  rows.forEach((ds, r) => {
+    const cy = L.rowsTop + r*L.rowH + B.numOff*S;
+    ds.forEach((d, c) => {
+      if (!d) return;
+      const cx = L.x0 + (c+.5)*L.colW;
+      const info = st.days[d] || {type:'none', label:''};
+      const date = new Date(st.y, st.m-1, d);
+      let col = look.black;
+      if (c===0 || isHoliday(date)) col = look.red; else if (c===6) col = look.blue;
+      if (info.type==='close'){
+        ctx.fillStyle = look.black; ctx.beginPath(); ctx.arc(cx, cy, B.circleR*S, 0, Math.PI*2); ctx.fill(); col = BASE.white;
+      } else if (info.type==='resume'){
+        ctx.strokeStyle = BASE.ring; ctx.lineWidth = B.ringW*S; ctx.beginPath(); ctx.arc(cx, cy, B.ringR*S, 0, Math.PI*2); ctx.stroke();
+      } else if (info.type==='off') col = BASE.white;
+      ctx.font = `${B.numSize*S}px ${fontStack(FONT.num)}`; ctx.textAlign = 'center';
+      ctx.fillStyle = col; fillTextSx(ctx, String(d), cx, cy + (nb.asc - nb.desc)/2, B.numSx);
+      // 공휴일 이름 (날짜 밑, Regular)
+      const hn = holidayName(iso(date));
+      if (hn){
+        ctx.font = `${B.holSize*S}px ${fontStack(FONT.reg)}`;
+        const hb = textBox(ctx, '가'), fit = Math.min(1, L.colW*0.9 / ctx.measureText(hn).width);
+        ctx.fillStyle = look.red;
+        fillTextSx(ctx, hn, cx, cy + B.holOff*S + (hb.asc - hb.desc)/2, fit);
+      }
+      // 칸 안 글자
+      const label = (info.label || '').split('\n').filter((l,i,arr) => l.trim() || arr.length>1);
+      if (label.length && label.some(l => l.trim())){
+        ctx.font = `${B.labelSize*S}px ${fontStack(FONT.eb)}`;
+        const lb = textBox(ctx, '가');
+        ctx.fillStyle = info.type==='off' ? look.red : look.black;
+        const lc = cy + B.labelOff*S;
+        label.forEach((t, i) => {
+          const y = lc + (i - (label.length-1)/2)*B.labelPitch*S;
+          ctx.fillText(t, cx, y + (lb.asc - lb.desc)/2);
+        });
+      }
+    });
+  });
+
+  // 하단 선
+  ctx.fillStyle = look.black;
+  roughRect(ctx, L.x0, L.lineTop, L.x1, L.lineTop + B.lineH*S, 1.6*S, 31, 4);
+
+  // 하단 문구
+  const tSize = B.textSize*S;
+  lines.forEach((ln, i) => {
+    const bt = (ln.b||''), nt = (ln.n||'');
+    const sep = bt && nt ? ' ' : '';
+    ctx.textAlign = 'left';
+    ctx.font = `${tSize}px ${fontStack(FONT.bold)}`; const bm = textBox(ctx, bt + sep); const pa = textBox(ctx, '(');
+    ctx.font = `${tSize}px ${fontStack(FONT.med)}`; const nm = textBox(ctx, nt);
+    const w = bm.w + nm.w, x = B.cx - w/2;
+    const base = L.textTop + i*L.pitch + pa.asc;
+    ctx.fillStyle = look.black;
+    ctx.font = `${tSize}px ${fontStack(FONT.bold)}`; ctx.fillText(bt + sep, x, base);
+    ctx.font = `${tSize}px ${fontStack(FONT.med)}`; ctx.fillText(nt, x + bm.w, base);
+  });
+  ctx.textAlign = 'center';
+
+  // 트럭
+  const tw = B.truckW*S, sc = tw / TRUCK_VB.w;
+  ctx.save(); ctx.translate(B.cx - tw/2, L.truckTop); ctx.scale(sc, sc);
+  ctx.fillStyle = look.black; ctx.fill(new Path2D(TRUCK_PATH));
+  ctx.strokeStyle = look.black; ctx.lineWidth = 3.62;
+  ctx.beginPath(); ctx.arc(11.41,35.52,4.66,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(60.57,35.52,4.66,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+
+  // 제목
+  const title = store.global.title.split('{월}').join(String(st.m));
+  const tt = roughText(title, `${B.titleSize*S}px ${fontStack(FONT.title)}`, look.black, look.rough);
+  ctx.drawImage(tt.c, B.cx + B.titleDx*S - tt.w/2 - tt.left, L.titleTop - tt.top);
+
+  // 질감 (일러스트레이터의 '스크린' 효과)
+  if (look.tex > 0){
+    ctx.save(); ctx.globalCompositeOperation = 'screen';
+    const lift = Math.round(Math.min(255, BASE.lift*look.tex));
+    ctx.fillStyle = `rgb(${lift},${lift},${lift})`; ctx.fillRect(0,0,fmt.W,fmt.H);
+    ctx.globalAlpha = Math.min(1, look.tex);
+    ctx.drawImage(texImg, 0, 0, fmt.W, fmt.H, 0, 0, fmt.W, fmt.H);
+    if (look.tex > 1){ ctx.globalAlpha = look.tex-1; ctx.drawImage(texImg, 0, 0, fmt.W, fmt.H, 0, 0, fmt.W, fmt.H); }
+    ctx.restore();
+  }
+  if (!target) sizeStage(fmt);
+}
+
+/* ───────── 화면 ───────── */
+const $ = id => document.getElementById(id);
+let lastLayout = null;
+
+function sizeStage(fmt){
+  const stage = $('stage');
+  const maxH = Math.max(420, window.innerHeight - 150), maxW = stage.parentElement.clientWidth - 8;
+  const scale = Math.min(maxW / fmt.W, maxH / fmt.H);
+  stage.style.width = Math.round(fmt.W*scale)+'px'; stage.style.height = Math.round(fmt.H*scale)+'px';
+}
+
+function syncWeeks(){
+  const st = M(); const weeks = weeksOf(st);
+  const opt = (sel, val) => {
+    sel.innerHTML = '<option value="auto">자동</option>' + weeks.map((ds,i) => {
+      const d = ds.filter(Boolean); return `<option value="${i}">${i+1}주 (${st.m}/${d[0]}~${st.m}/${d[d.length-1]})</option>`;
+    }).join('');
+    sel.value = val;
+  };
+  opt($('w0'), st.w0); opt($('w1'), st.w1);
+}
+function syncLines(){
+  const st = M(); const box = $('lines');
+  if (box.contains(document.activeElement)) return; // 입력 중엔 다시 그리지 않음
+  box.innerHTML = '';
+  st.lines.forEach((l, i) => {
+    const row = document.createElement('div'); row.className = 'ln';
+    row.innerHTML = `<input type="text" data-i="${i}" data-f="b"><input type="text" data-i="${i}" data-f="n"><button class="small" data-del="${i}" title="줄 지우기">×</button>`;
+    row.querySelector('[data-f=b]').value = l.b; row.querySelector('[data-f=n]').value = l.n;
+    box.appendChild(row);
+  });
+  $('autoLines').checked = st.autoLines;
+}
+function syncHolidays(){
+  const st = M(); const list = [];
+  const ys = new Set([st.y]);
+  Object.entries(HOLIDAYS).forEach(([d,n]) => { if (ys.has(+d.slice(0,4))) list.push({date:d, name:n, c:false}); });
+  store.global.custom.forEach(h => { if (ys.has(+h.date.slice(0,4))) list.push({...h, c:true}); });
+  list.sort((a,b) => a.date.localeCompare(b.date));
+  $('holList').innerHTML = list.length ? list.map(h => {
+    const d = new Date(h.date+'T00:00');
+    return `<div><span${h.date.slice(0,7)===mkey(st.y,st.m)?' style="font-weight:700"':''}>${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]}) ${h.name}${h.c?' <span class="c">직접 추가</span>':''}</span>${h.c?`<button class="small" data-hdel="${h.date}">삭제</button>`:''}</div>`;
+  }).join('') : `<div>${st.y}년 공휴일 정보가 없습니다. 아래에서 직접 추가하세요.</div>`;
+}
+function syncForm(){
+  const st = M(), g = store.global;
+  $('ym').value = mkey(st.y, st.m);
+  $('title').value = g.title;
+  $('rough').checked = g.look.rough;
+  $('cRed').value = g.look.red; $('cBlue').value = g.look.blue; $('cBlack').value = g.look.black;
+  $('tex').value = g.look.tex; $('texV').textContent = Math.round(g.look.tex*100)+'%';
+  [...$('tabs').children].forEach(b => b.classList.toggle('on', b.dataset.k === g.fmt));
+  syncWeeks(); syncLines(); syncHolidays();
+}
+
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(()=>t.classList.remove('on'), 1800); }
+
+/* 날짜칸 찾기 */
+function cellAt(ev){
+  if (!lastLayout) return null;
+  const {L, rows, fmt} = lastLayout;
+  const rect = $('cv').getBoundingClientRect();
+  const x = (ev.clientX - rect.left) * fmt.W / rect.width, y = (ev.clientY - rect.top) * fmt.H / rect.height;
+  if (x < L.x0 || x >= L.x1 || y < L.rowsTop || y >= L.lineTop) return null;
+  const c = Math.floor((x - L.x0)/L.colW), r = Math.floor((y - L.rowsTop)/L.rowH);
+  const d = rows[r] && rows[r][c];
+  return d ? {d, r, c} : null;
+}
+function cellRect(r, c){
+  const {L, fmt} = lastLayout; const rect = $('cv').getBoundingClientRect(); const k = rect.width / fmt.W;
+  return {left:(L.x0 + c*L.colW)*k, top:(L.rowsTop + r*L.rowH)*k, width:L.colW*k, height:L.rowH*k};
+}
+function clearOverlays(cls){ document.querySelectorAll('.stage .'+cls).forEach(e => e.remove()); }
+function overlay(cls, r, c){
+  const e = document.createElement('div'); e.className = cls; Object.assign(e.style, Object.fromEntries(Object.entries(cellRect(r,c)).map(([k,v]) => [k, v+'px'])));
+  $('stage').appendChild(e);
+}
+
+let drag = null;
+function rowColOf(d){ const {rows} = lastLayout; for (let r=0;r<rows.length;r++){ const c = rows[r].indexOf(d); if (c>=0) return {r,c}; } return null; }
+function showSel(a, b){
+  clearOverlays('sel');
+  const [x, y] = a<b ? [a,b] : [b,a];
+  for (let d=x; d<=y; d++){ const p = rowColOf(d); if (p) overlay('sel', p.r, p.c); }
+}
+
+function applyOffRange(a, b){
+  const [x, y] = a<b ? [a,b] : [b,a];
+  change(() => {
+    const st = M();
+    const allOff = (() => { for (let d=x; d<=y; d++) if (!st.days[d] || st.days[d].type!=='off') return false; return true; })();
+    if (allOff){ for (let d=x; d<=y; d++) delete st.days[d]; return; }
+    for (let d=x; d<=y; d++){
+      const old = st.days[d];
+      const hol = isHoliday(new Date(st.y, st.m-1, d));
+      st.days[d] = {type:'off', label: old && old.type==='off' ? old.label : (hol ? DEFAULT_LABEL.off : '')};
+    }
+    let has = false; for (let d=x; d<=y; d++) if (st.days[d].label) has = true;
+    if (!has){
+      let pick = x; for (let d=x; d<=y; d++){ if (!isWeekend(new Date(st.y, st.m-1, d))){ pick = d; break; } }
+      st.days[pick].label = DEFAULT_LABEL.off;
+    }
+  });
+}
+
+/* 칸 편집 창 */
+let popDay = null;
+function openPop(d, ev){
+  popDay = d; const st = M(); const info = st.days[d] || {type:'none', label:''};
+  const date = new Date(st.y, st.m-1, d);
+  const hn = holidayName(iso(date));
+  $('popTitle').textContent = `${st.m}월 ${d}일 (${WD[date.getDay()]})${hn ? ' · '+hn : ''}`;
+  $('popTypes').innerHTML = TYPES.map(t => `<button data-t="${t.k}" class="${info.type===t.k?'on':''}">${t.name}</button>`).join('');
+  $('popLabel').value = info.label || '';
+  $('popLabel').disabled = info.type==='none';
+  const p = $('pop'); p.style.display = 'block';
+  const w = p.offsetWidth, h = p.offsetHeight;
+  p.style.left = Math.min(window.innerWidth - w - 10, ev.clientX + 12) + 'px';
+  p.style.top = Math.min(window.innerHeight - h - 10, Math.max(10, ev.clientY - 20)) + 'px';
+}
+function closePop(){ $('pop').style.display = 'none'; popDay = null; }
+
+/* ───────── 이벤트 ───────── */
+function bind(){
+  $('tabs').innerHTML = FORMATS.map(f => `<button data-k="${f.k}">${f.name}</button>`).join('');
+  $('dl').innerHTML = FORMATS.map(f => `<button data-dl="${f.k}">${f.name} PNG 받기</button>`).join('') + '<button class="primary" data-dl="all">3장 모두 받기</button>';
+
+  $('tabs').onclick = e => { const k = e.target.dataset.k; if (!k) return; store.global.fmt = k; persist(); closePop(); syncForm(); render(); };
+  $('dl').onclick = e => { const k = e.target.dataset.dl; if (!k) return; download(k==='all' ? FORMATS.map(f=>f.k) : [k]); };
+
+  const goMonth = (y, m) => { closePop(); pushUndo(); ensureMonth(y, m); afterChange(true); };
+  $('ym').onchange = () => { const [y,m] = $('ym').value.split('-').map(Number); if (y && m) goMonth(y, m); };
+  $('prevM').onclick = () => { const st = M(); const d = new Date(st.y, st.m-2, 1); goMonth(d.getFullYear(), d.getMonth()+1); };
+  $('nextM').onclick = () => { const st = M(); const d = new Date(st.y, st.m, 1); goMonth(d.getFullYear(), d.getMonth()+1); };
+  $('w0').onchange = () => change(() => { M().w0 = $('w0').value; });
+  $('w1').onchange = () => change(() => { M().w1 = $('w1').value; });
+
+  $('title').oninput = () => change(() => { store.global.title = $('title').value; }, true);
+  $('rough').onchange = () => change(() => { store.global.look.rough = $('rough').checked; });
+
+  $('autoLines').onchange = () => change(() => { M().autoLines = $('autoLines').checked; });
+  $('lines').addEventListener('input', e => {
+    const i = e.target.dataset.i, f = e.target.dataset.f; if (i===undefined) return;
+    change(() => { const st = M(); st.autoLines = false; st.lines[i][f] = e.target.value; }, true);
+    $('autoLines').checked = false;
+  });
+  $('lines').addEventListener('click', e => {
+    const i = e.target.dataset.del; if (i===undefined) return;
+    change(() => { const st = M(); st.autoLines = false; st.lines.splice(+i,1); });
+  });
+  $('addLine').onclick = () => change(() => { const st = M(); st.autoLines = false; st.lines.push({b:'', n:''}); });
+
+  $('hAdd').onclick = () => {
+    const date = $('hDate').value, name = $('hName').value.trim() || '휴일';
+    if (!date) { toast('날짜를 먼저 고르세요'); return; }
+    change(() => { store.global.custom = store.global.custom.filter(h => h.date!==date).concat({date, name}); });
+    syncHolidays(); $('hName').value = '';
+    toast('추가했습니다. "이 달 자동 휴무 다시 적용"을 누르면 달력에 반영됩니다.');
+  };
+  $('holList').onclick = e => { const d = e.target.dataset.hdel; if (!d) return; change(() => { store.global.custom = store.global.custom.filter(h => h.date!==d); }); syncHolidays(); };
+  $('reAuto').onclick = () => change(() => { const st = M(); st.days = autoDays(st.y, st.m); st.w0 = st.w1 = 'auto'; st.autoLines = true; });
+
+  const lookIn = (id, key, conv) => { $(id).oninput = () => change(() => { store.global.look[key] = conv($(id).value); if (key==='tex') $('texV').textContent = Math.round(+$(id).value*100)+'%'; }, true); };
+  lookIn('cRed','red',String); lookIn('cBlue','blue',String); lookIn('cBlack','black',String); lookIn('tex','tex',Number);
+  $('resetLook').onclick = () => { change(() => { store.global.look = {...LOOK_DEFAULT}; }); syncForm(); };
+
+  $('undo').onclick = undo; $('redo').onclick = redo;
+  document.addEventListener('keydown', e => {
+    const tag = (e.target.tagName||'').toLowerCase();
+    if (e.key==='Escape') closePop();
+    if (!(e.metaKey||e.ctrlKey) || e.key.toLowerCase()!=='z') return;
+    if (tag==='input' && e.target.type==='text' || tag==='textarea') return; // 글 입력 칸 안에서는 글자 되돌리기
+    e.preventDefault(); e.shiftKey ? redo() : undo();
+  });
+
+  $('exportJson').onclick = () => {
+    const blob = new Blob([JSON.stringify(store, null, 2)], {type:'application/json'});
+    saveBlob(blob, '배송달력_설정.json');
+  };
+  $('importBtn').onclick = () => $('importFile').click();
+  $('importFile').onchange = async () => {
+    const f = $('importFile').files[0]; if (!f) return;
+    try{
+      const data = JSON.parse(await f.text());
+      if (!data.global || !data.months || !data.cur || !data.months[data.cur]) throw 0;
+      pushUndo(); store = data; store.global.look = {...LOOK_DEFAULT, ...store.global.look}; afterChange(true); toast('설정을 불러왔습니다');
+    }catch(e){ toast('설정 파일이 아닙니다'); }
+    $('importFile').value = '';
+  };
+
+  // 날짜칸 누르기·끌기
+  const cv = $('cv');
+  cv.addEventListener('pointerdown', e => {
+    const hit = cellAt(e); if (!hit) { closePop(); return; }
+    cv.setPointerCapture(e.pointerId);
+    drag = {a:hit.d, b:hit.d}; showSel(hit.d, hit.d);
+  });
+  cv.addEventListener('pointermove', e => {
+    const hit = cellAt(e);
+    clearOverlays('hover'); if (hit && !drag) overlay('hover', hit.r, hit.c);
+    if (!drag || !hit) return;
+    if (hit.d !== drag.b){ drag.b = hit.d; showSel(drag.a, drag.b); }
+  });
+  cv.addEventListener('pointerleave', () => clearOverlays('hover'));
+  cv.addEventListener('pointerup', e => {
+    if (!drag) return; const {a, b} = drag; drag = null; clearOverlays('sel');
+    if (a === b) openPop(a, e); else { closePop(); applyOffRange(a, b); }
+  });
+
+  // 편집 창
+  $('popTypes').onclick = e => {
+    const t = e.target.dataset.t; if (!t || popDay===null) return;
+    const d = popDay;
+    change(() => { const st = M(); if (t==='none') delete st.days[d]; else st.days[d] = {type:t, label:DEFAULT_LABEL[t]}; });
+    [...$('popTypes').children].forEach(b => b.classList.toggle('on', b.dataset.t===t));
+    $('popLabel').value = t==='none' ? '' : DEFAULT_LABEL[t]; $('popLabel').disabled = t==='none';
+  };
+  $('popLabel').oninput = () => { const d = popDay; if (d===null) return; change(() => { const st = M(); if (st.days[d]) st.days[d].label = $('popLabel').value; }, true); };
+  $('popDefault').onclick = () => { const d = popDay; const st = M(); if (d===null || !st.days[d]) return; change(() => { st.days[d].label = DEFAULT_LABEL[st.days[d].type]; }); $('popLabel').value = st.days[d].label; };
+  $('popClose').onclick = closePop;
+  document.addEventListener('pointerdown', e => { if ($('pop').style.display==='block' && !$('pop').contains(e.target) && e.target !== cv) closePop(); });
+
+  window.addEventListener('resize', () => { if (lastLayout) sizeStage(lastLayout.fmt); });
+}
+
+function saveBlob(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function download(keys){
+  const st = M();
+  for (const k of keys){
+    const f = FORMATS.find(x => x.k===k); const c = document.createElement('canvas');
+    render(c, k);
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    saveBlob(blob, `${st.y}년 ${st.m}월 배송안내_${f.file}.png`);
+    await new Promise(r => setTimeout(r, 400));
+  }
+  toast(keys.length>1 ? '3장을 받았습니다' : 'PNG를 받았습니다');
+}
+
+/* ───────── 시작 ───────── */
+async function start(){
+  try{ const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); if (saved && saved.months && saved.cur && saved.months[saved.cur]) { store = saved; store.global.look = {...LOOK_DEFAULT, ...store.global.look}; } }catch(e){}
+  if (!store.cur){ const now = new Date(); ensureMonth(now.getFullYear(), now.getMonth()+1); }
+  const q = new URLSearchParams(location.search);
+  if (q.get('ym')){ const [y,m] = q.get('ym').split('-').map(Number); if (y&&m) ensureMonth(y,m); }
+  if (q.get('fmt')) store.global.fmt = q.get('fmt');
+  await loadAssets();
+  bind(); syncForm(); render(); updUndoBtns();
+  $('loading').remove();
+  if (q.has('shot')){ // 확인용: 캔버스만 실제 크기로 표시
+    const c = $('cv'); document.body.innerHTML = ''; document.body.style.margin = 0; document.body.appendChild(c);
+    c.style.width = c.width+'px'; c.style.height = c.height+'px';
+  }
+  window.__shipcal = {render, FORMATS, store: () => store};
+}
+start().catch(e => { $('loading').textContent = '불러오기에 실패했습니다: ' + e.message + ' (assets.js가 같은 폴더에 있는지 확인하세요)'; });
+})();
+</script>
+</body>
+</html>
