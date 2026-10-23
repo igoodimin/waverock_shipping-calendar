@@ -4,10 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>배송달력 만들기</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pretendard/1.3.9/static/pretendard.min.css">
+<link rel="stylesheet" href="https://igoodimin.github.io/waverock-design-tools/ui.css">
 <style>
-  :root{--bg:#eceae6;--panel:#fff;--line:#dedbd5;--ink:#1d1d1d;--sub:#77736c;--red:#f72323;--accent:#111}
+  :root{--bg:var(--wr-bg,#f5f5f5);--panel:var(--wr-surface,#fff);--line:var(--wr-line,#e2e2e2);--ink:var(--wr-ink,#222);--sub:var(--wr-sub,#6b6b6b);--red:#f72323;--accent:var(--wr-accent,#222)}
+  aside .wr-home{margin-bottom:14px}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",sans-serif}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}
   .app{display:grid;grid-template-columns:360px 1fr;min-height:100vh}
   aside{background:var(--panel);border-right:1px solid var(--line);padding:18px 18px 40px;overflow:auto;max-height:100vh;position:sticky;top:0}
   h1{font-size:18px;margin:0 0 4px}
@@ -50,6 +53,7 @@
 <div id="loading">글꼴과 질감을 불러오는 중…</div>
 <div class="app">
   <aside>
+    <a class="wr-home" href="https://igoodimin.github.io/waverock-design-tools/">← 디자인 툴</a>
     <h1>배송달력 만들기</h1>
     <p class="hint">날짜칸을 누르면 마감·재개·휴무를 고릅니다. 날짜칸을 끌면 그 기간이 배송휴무가 됩니다.</p>
 
