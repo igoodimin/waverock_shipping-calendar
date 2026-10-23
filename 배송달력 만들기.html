@@ -8,7 +8,6 @@
 <link rel="stylesheet" href="https://igoodimin.github.io/waverock-design-tools/ui.css">
 <style>
   :root{--bg:var(--wr-bg,#f5f5f5);--panel:var(--wr-surface,#fff);--line:var(--wr-line,#e2e2e2);--ink:var(--wr-ink,#222);--sub:var(--wr-sub,#6b6b6b);--red:#f72323;--accent:var(--wr-accent,#222)}
-  aside .wr-home{margin-bottom:14px}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}
   .app{display:grid;grid-template-columns:360px 1fr;min-height:100vh}
@@ -47,14 +46,40 @@
   .toast.on{opacity:1}
   #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);font-size:15px;z-index:20}
   @media (max-width:900px){.app{grid-template-columns:1fr}aside{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}main{padding:16px}}
+
+  /* ── 디자인 툴 공통 레이아웃 (세팅 달력 기준, ui.css 토큰) ── */
+  body{font-weight:500}
+  .app{grid-template-columns:var(--wr-sidebar-w,280px) minmax(0,1fr);gap:28px;padding:32px;min-height:0}
+  aside{background:none;border-right:1px solid var(--line);padding:0 18px 0 0;max-height:calc(100vh - 32px);top:16px}
+  aside>.hint:first-child{font-size:13px;line-height:1.6}
+  section{padding:20px 0 12px;margin-top:20px}
+  h2{font-size:15px;font-weight:700;margin:0 0 12px}
+  label.f{font-size:12px;margin:10px 0 6px}
+  .hint{font-size:12px;line-height:1.7}
+  input[type=text],input[type=month],input[type=date],select{min-height:var(--wr-control-h,44px);padding:0 12px;border-radius:var(--wr-radius,8px);font-size:14px}
+  textarea{padding:10px 12px;border-radius:var(--wr-radius,8px)}
+  .hol{border-radius:var(--wr-radius,8px)}
+  button{min-height:var(--wr-control-h,44px);padding:0 14px;border:0;border-radius:var(--wr-radius,8px);background:var(--wr-soft,#ececec);font-weight:700;font-size:14px}
+  button:hover{background:var(--wr-soft-hover,#e2e2e2)}
+  button.primary,button.on,.tabs button.on,#pop .types button.on{background:var(--accent);color:var(--wr-accent-ink,#fff)}
+  button.small{min-height:32px;padding:0 10px;font-size:12px}
+  .row{gap:8px;margin-bottom:8px}
+  .lines .ln{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) 32px;gap:6px;margin-bottom:6px}
+  .lines .ln input{padding:0 10px}
+  main{padding:0;gap:16px}
+  @media(max-width:1100px){.app{grid-template-columns:var(--wr-sidebar-w-mid,240px) minmax(0,1fr);gap:20px;padding:24px}}
+  @media(max-width:900px){.app{grid-template-columns:var(--wr-sidebar-w-mid,240px) minmax(0,1fr)}aside{position:sticky;max-height:calc(100vh - 32px);border-right:1px solid var(--line);border-bottom:0}main{padding:0}}
+  @media(max-width:760px){.app{display:flex;flex-direction:column;padding:20px}aside{position:static;max-height:none;border-right:0;padding:0}}
 </style>
 </head>
 <body>
 <div id="loading">글꼴과 질감을 불러오는 중…</div>
+<header class="wr-header">
+  <a class="wr-home" href="https://igoodimin.github.io/waverock-design-tools/">← 디자인 툴</a>
+  <h1>배송달력 만들기</h1>
+</header>
 <div class="app">
   <aside>
-    <a class="wr-home" href="https://igoodimin.github.io/waverock-design-tools/">← 디자인 툴</a>
-    <h1>배송달력 만들기</h1>
     <p class="hint">날짜칸을 누르면 마감·재개·휴무를 고릅니다. 날짜칸을 끌면 그 기간이 배송휴무가 됩니다.</p>
 
     <section>
